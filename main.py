@@ -208,6 +208,21 @@ class GameButton(discord.ui.Button):
                 ephemeral=False
             )
 
+        elif self.custom_id == "odd_even":
+            results = []
+            for _ in range(3):  # 3회 반복
+                roll = random.randint(1, 6)
+                results.append("홀" if roll % 2 else "짝")
+
+            result_text = " ".join(results)
+            timestamp = datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
+
+            await interaction.response.send_message(
+                f"홀짝 게임 결과: {result_text}\n{timestamp}",
+                ephemeral=False
+            )
+
+
         else:
             await interaction.response.send_message("지원되지 않는 게임입니다.", ephemeral=False)
 

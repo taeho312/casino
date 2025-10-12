@@ -112,6 +112,8 @@ async def 작동(ctx):
 
 @bot.event
 async def on_ready():
+    # 퍼시스턴트 뷰 등록 (재시작 후 기존 버튼 유지)
+    bot.add_view(GameMenu())
     print(f'Logged in as {bot.user} ({bot.user.id})')
 
 @bot.command(name="접속", help="현재 봇이 정상 작동 중인지 확인합니다. 예) !접속")
@@ -178,10 +180,14 @@ class GameButton(discord.ui.Button):
                 ephemeral=False
             )
 
+        # ✅ A안: 홀짝 버튼 클릭 시 즉시 3개 결과 출력
         elif self.custom_id == "odd_even":
+            results = []
+            for _ in range(3):
+                roll = random.randint(1, 6)
+                results.append("홀" if roll % 2 else "짝")
             await interaction.response.send_message(
-                f"주사위 개수를 선택해 주십시오. (1D6, 2D6, 3D6)\n{timestamp}",
-                view=DiceSelectView(),
+                f"홀짝 게임 결과: {' '.join(results)}\n{timestamp}",
                 ephemeral=False
             )
 
@@ -195,7 +201,7 @@ class GameButton(discord.ui.Button):
         elif self.custom_id == "slot":
             # 슬롯 심볼
             symbols = ['❤️', '💔', '💖', '💝', '🔴', '🔥', '🦋', '💥']
-        
+
             # --- 확률 조정 (합계 = 100) ---
             odds = {
                 "jackpot": 1,   # 💥💥💥 (1%)
@@ -203,24 +209,24 @@ class GameButton(discord.ui.Button):
                 "double": 30,   # 2개 동일 (30%)
                 "lose": 63      # 모두 다름 (63%)
             }
-        
+
             # --- 결과 유형 결정 ---
             roll_type = random.choices(
                 population=["jackpot", "triple", "double", "lose"],
                 weights=[odds["jackpot"], odds["triple"], odds["double"], odds["lose"]],
                 k=1
             )[0]
-        
+
             # --- 결과 생성 ---
             if roll_type == "jackpot":
                 reels = ['💥', '💥', '💥']
                 guide = "잭팟! 베팅 포인트를 회복하며 베팅한 포인트의 3배를 추가 획득합니다!"
-        
+
             elif roll_type == "triple":
                 emoji = random.choice([e for e in symbols if e != '💥'])
                 reels = [emoji, emoji, emoji]
                 guide = "트리플! 베팅 포인트를 회복하며 베팅한 포인트만큼 추가 획득합니다."
-        
+
             elif roll_type == "double":
                 # 💥 제외 (희귀성 유지)
                 pool = [e for e in symbols if e != '💥']
@@ -229,14 +235,13 @@ class GameButton(discord.ui.Button):
                 reels = [emoji, emoji, random.choice(others)]
                 random.shuffle(reels)
                 guide = "더블! 베팅 포인트를 회복합니다."
-        
+
             else:  # lose
                 reels = random.sample(symbols, 3)
                 guide = "베팅 포인트 전액 차감합니다."
-        
+
             # --- 출력 ---
             a, b, c = reels
-            timestamp = now_kst_str()
             await interaction.response.send_message(
                 f"{a} {b} {c}\n{guide}\n{timestamp}",
                 ephemeral=False
@@ -248,21 +253,6 @@ class GameButton(discord.ui.Button):
                 f"야바위 결과: {result}\n{timestamp}",
                 ephemeral=False
             )
-
-        elif self.custom_id == "odd_even":
-            results = []
-            for _ in range(3):  # 3회 반복
-                roll = random.randint(1, 6)
-                results.append("홀" if roll % 2 else "짝")
-
-            result_text = " ".join(results)
-            timestamp = datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
-
-            await interaction.response.send_message(
-                f"홀짝 게임 결과: {result_text}\n{timestamp}",
-                ephemeral=False
-            )
-
 
         else:
             await interaction.response.send_message("지원되지 않는 게임입니다.", ephemeral=False)
@@ -342,31 +332,6 @@ class ShuffleButton(discord.ui.Button):
 
         user_indices[user_id][self.game_key] = 0
         await interaction.response.send_message(f"{self.label}이 완료되었습니다.\n{timestamp}", ephemeral=False)
-
-# ────────────────────────────────────────────────────────────────────────────────
-# 🎲 홀짝용 주사위 선택 (무제한 사용)
-# ────────────────────────────────────────────────────────────────────────────────
-class DiceSelectView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.add_item(DiceButton("1D6", 1, discord.ButtonStyle.danger))
-        self.add_item(DiceButton("2D6", 2, discord.ButtonStyle.primary))
-        self.add_item(DiceButton("3D6", 3, discord.ButtonStyle.success))
-
-class DiceButton(discord.ui.Button):
-    def __init__(self, label: str, dice_count: int, style: discord.ButtonStyle):
-        super().__init__(label=label, style=style, custom_id=f"dice_{label}")
-        self.dice_count = dice_count
-
-    async def callback(self, interaction: discord.Interaction):
-        rolls = [random.randint(1, 6) for _ in range(self.dice_count)]
-        odd_even = ["홀" if r % 2 else "짝" for r in rolls]
-        timestamp = now_kst_str()
-
-        await interaction.response.send_message(
-            f"{self.label} 값: {' '.join(map(str, rolls))}\n판정: {' '.join(odd_even)}\n{timestamp}",
-            ephemeral=False
-        )
 
 # ────────────────────────────────────────────────────────────────────────────────
 # 📊 합계

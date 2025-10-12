@@ -49,10 +49,15 @@ try:
     creds_dict = json.loads(GOOGLE_CREDS)
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     gclient = gspread.authorize(creds)
-    sheet = gclient.open_by_key(SHEET_KEY).sheet1  # 기본은 1번째 시트
+    # sheet = gclient.open_by_key(SHEET_KEY).sheet1  # (옵션) 필요시 사용
 except Exception as e:
     print("❌ 구글 스프레드시트 인증/접속 실패:", e)
     sys.exit(1)
+
+# ✅ 누락된 ws() 헬퍼 추가
+def ws(title: str):
+    """스프레드시트 내 워크시트 핸들을 반환."""
+    return gclient.open_by_key(SHEET_KEY).worksheet(title)
 
 # 🧰 유틸
 def now_kst_str(fmt="%Y-%m-%d %H:%M:%S"):
@@ -92,22 +97,27 @@ def _parse_names_and_amount(args):
     names = list(dict.fromkeys(names))
     return (names, amount), None
 
-def shuffle_all_decks(user_id):
-  user_decks[user_id] = {
-    "blackjack": random.sample(deck, len(deck)),
-    "blind_blackjack": random.sample(deck, len(deck))
-  }
-  user_indices[user_id] = {"blackjack": 0, "blind_blackjack": 0}
-  
-def ensure_user_setup(user_id):
-  if user_id not in user_decks:
-    shuffle_all_decks(user_id)
+# ✅ baccarat 초기화 포함
+def shuffle_all_decks(user_id: str):
+    user_decks[user_id] = {
+        "blackjack": random.sample(deck, len(deck)),
+        "blind_blackjack": random.sample(deck, len(deck)),
+        "baccarat": random.sample(deck * 6, len(deck) * 6),  # 6덱 슈
+    }
+    user_indices[user_id] = {"blackjack": 0, "blind_blackjack": 0, "baccarat": 0}
 
-@bot.command() async def 세팅(ctx):
-  await ctx.send("안녕하세요? 원하시는 게임 버튼을 클릭해주세요:", view=GameMenu())
+def ensure_user_setup(user_id: str):
+    if user_id not in user_decks:
+        shuffle_all_decks(user_id)
 
-@bot.command() async def 작동(ctx):
-  await ctx.send("현재 정상 작동 중입니다.")
+# ✅ 데코레이터 줄바꿈 수정
+@bot.command()
+async def 세팅(ctx):
+    await ctx.send("안녕하세요? 원하시는 게임 버튼을 클릭해주세요:", view=GameMenu())
+
+@bot.command()
+async def 작동(ctx):
+    await ctx.send("현재 정상 작동 중입니다.")
 
 @bot.event
 async def on_ready():
@@ -115,7 +125,7 @@ async def on_ready():
 
 @bot.command(name="접속", help="현재 봇이 정상 작동 중인지 확인합니다. 만약 봇이 응답하지 않으면 접속 오류입니다. 예) !접속")
 async def 접속(ctx):
-    timestamp = datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = now_kst_str()
     await ctx.send(f"현재 봇이 구동 중입니다.\n{timestamp}")
 
 # ✅ 연결 테스트용 커맨드 (원하면 삭제 가능)
@@ -147,7 +157,6 @@ class GameMenu(discord.ui.View):
         self.add_item(GameButton("로또", "lotto", discord.ButtonStyle.success, row=2))
         self.add_item(GameButton("셔플", "shuffle", discord.ButtonStyle.secondary, row=2))
 
-
 class GameButton(discord.ui.Button):
     def __init__(self, label: str, custom_id: str, style: discord.ButtonStyle, row: int):
         super().__init__(label=label, custom_id=custom_id, style=style, row=row)
@@ -156,7 +165,7 @@ class GameButton(discord.ui.Button):
         user_id = str(interaction.user.id)
         ensure_user_setup(user_id)
 
-        timestamp = datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = now_kst_str()
 
         if self.custom_id in ["blackjack", "blind_blackjack", "baccarat"]:
             await interaction.response.send_message(
@@ -212,7 +221,6 @@ class GameButton(discord.ui.Button):
         else:
             await interaction.response.send_message("❌ 지원되지 않는 게임입니다.", ephemeral=False)
 
-
 # ────────────────────────────────────────────────────────────────────────────────
 # 🃏 카드 배분 (블랙잭 / 블라인드 블랙잭 / 바카라)
 # ────────────────────────────────────────────────────────────────────────────────
@@ -222,7 +230,6 @@ class CardDrawView(discord.ui.View):
         self.game_type = game_type
         self.add_item(CardDrawButton("[2장]", 2, discord.ButtonStyle.danger, game_type))
         self.add_item(CardDrawButton("[1장]", 1, discord.ButtonStyle.primary, game_type))
-
 
 class CardDrawButton(discord.ui.Button):
     def __init__(self, label: str, draw_count: int, style: discord.ButtonStyle, game_type: str):
@@ -234,7 +241,7 @@ class CardDrawButton(discord.ui.Button):
         user_id = str(interaction.user.id)
         ensure_user_setup(user_id)
 
-        timestamp = datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = now_kst_str()
 
         deck_ref = user_decks[user_id][self.game_type]
         idx = user_indices[user_id][self.game_type]
@@ -264,7 +271,6 @@ class CardDrawButton(discord.ui.Button):
 
         await interaction.response.send_message(response_text, ephemeral=False)
 
-
 # ────────────────────────────────────────────────────────────────────────────────
 # 🔄 셔플 선택
 # ────────────────────────────────────────────────────────────────────────────────
@@ -274,7 +280,6 @@ class ShuffleSelectView(discord.ui.View):
         self.add_item(ShuffleButton("블랙잭 셔플", "blackjack", discord.ButtonStyle.danger))
         self.add_item(ShuffleButton("블라인드 셔플", "blind_blackjack", discord.ButtonStyle.primary))
         self.add_item(ShuffleButton("바카라 셔플", "baccarat", discord.ButtonStyle.success))
-
 
 class ShuffleButton(discord.ui.Button):
     def __init__(self, label: str, game_key: str, style: discord.ButtonStyle):
@@ -294,7 +299,6 @@ class ShuffleButton(discord.ui.Button):
         user_indices[user_id][self.game_key] = 0
         await interaction.response.send_message(f"🔄 {self.label} 완료!", ephemeral=False)
 
-
 # ────────────────────────────────────────────────────────────────────────────────
 # 🎲 홀짝용 주사위 선택 (무제한 사용)
 # ────────────────────────────────────────────────────────────────────────────────
@@ -305,7 +309,6 @@ class DiceSelectView(discord.ui.View):
         self.add_item(DiceButton("2D6", 2, discord.ButtonStyle.primary))
         self.add_item(DiceButton("3D6", 3, discord.ButtonStyle.success))
 
-
 class DiceButton(discord.ui.Button):
     def __init__(self, label: str, dice_count: int, style: discord.ButtonStyle):
         super().__init__(label=label, style=style, custom_id=f"dice_{label}")
@@ -314,25 +317,29 @@ class DiceButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction):
         rolls = [random.randint(1, 6) for _ in range(self.dice_count)]
         odd_even = ["홀" if r % 2 else "짝" for r in rolls]
-        timestamp = datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = now_kst_str()
 
         await interaction.response.send_message(
             f"🎲 {self.label} 주사위 값은 {' '.join(map(str, rolls))} → {' '.join(odd_even)}입니다.\n{timestamp}",
             ephemeral=False
         )
 
+# ────────────────────────────────────────────────────────────────────────────────
+# 📊 합계
+# ────────────────────────────────────────────────────────────────────────────────
 @bot.command(name="합계", help="시트 내 포인트 페이지에서 각 진영의 현재 포인트 값을 불러옵니다. 예) !합계")
 async def 합계(ctx):
     try:
         sh = ws("포인트")
-        v_g2 = sh.acell("G1").value  # 흑운
-        v_i2 = sh.acell("I1").value  # 운사
-        timestamp = datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
+        # ✅ 변수명/셀 일치 수정
+        v_g1 = sh.acell("G1").value  # 흑운
+        v_i1 = sh.acell("I1").value  # 운사
+        timestamp = now_kst_str()
         await ctx.send(
             f"현재 진영 포인트\n\n흑운: '{v_g1}'\n운사: '{v_i1}'\n{timestamp}"
         )
     except Exception as e:
-        timestamp = datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = now_kst_str()
         await ctx.send(f"❌ 조회 실패: {e}\n{timestamp}")
 
 def _find_row_by_name(worksheet, name: str) -> int | None:
@@ -350,7 +357,7 @@ def _normalize_items_str(s: str | None) -> str:
     # 콤마로 구분된 아이템 문자열 정규화 (공백 제거, 빈 토큰 제거)
     if not s:
         return ""
-    items = [t.strip() for t in s.split(", ") if t.strip()]
+    items = [t.strip() for t in s.split(",") if t.strip()]
     return ", ".join(items)
 
 @bot.command(name="추첨", help="!추첨 숫자 → 시트 내 포인트 페이지의 B5부터 마지막 행까지 이름 중에서 숫자만큼 무작위 추첨합니다. 예) !추첨 3")
@@ -483,7 +490,7 @@ def _apply_delta_to_points(name: str, delta: int, *, start_row: int = 5) -> tupl
 @bot.command(name="추가", help="!추가 이름1 [이름2 ...] 수치 → 포인트 시트 C열(C5~) 값을 수치만큼 증가")
 async def 추가(ctx, *args):
     parsed, err = _parse_names_and_amount(args)
-    timestamp = datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = now_kst_str()
     if err:
         await ctx.send(f"{err}\n{timestamp}")
         return
@@ -506,7 +513,6 @@ async def 추가(ctx, *args):
     if fail_lines: parts.append("\n".join(fail_lines))
     parts.append(timestamp)
     await ctx.send("\n".join(parts))
-
 
 @bot.command(
     name="전체",
@@ -561,11 +567,10 @@ async def 전체(ctx, 수치: str):
     except Exception as e:
         await ctx.send(f"❌ 일괄 증감 실패: {e}")
 
-
 @bot.command(name="차감", help="!차감 이름1 [이름2 ...] 수치 → 포인트 시트 C열(C5~) 값을 수치만큼 감소")
 async def 차감(ctx, *args):
     parsed, err = _parse_names_and_amount(args)
-    timestamp = datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = now_kst_str()
     if err:
         await ctx.send(f"{err}\n{timestamp}")
         return
@@ -590,7 +595,6 @@ async def 차감(ctx, *args):
     await ctx.send("\n".join(parts))
 
 # ✅ 다이스 버튼
-
 class DiceButton(Button):
     def __init__(self, sides: int, style: discord.ButtonStyle, owner_id: int):
         super().__init__(label=f"1d{sides}", style=style)
@@ -606,7 +610,7 @@ class DiceButton(Button):
             return
 
         roll = random.randint(1, self.sides)
-        timestamp = datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = now_kst_str()
         await interaction.response.send_message(
             f"{interaction.user.mention}의 **1d{self.sides}** 결과: **{roll}**\n{timestamp}"
         )
@@ -629,6 +633,5 @@ async def 다이스(ctx):
     view = DiceView(owner_id=ctx.author.id)
     msg = await ctx.send(f"{ctx.author.mention} 굴릴 주사위를 선택하세요:", view=view)
     view.message = msg
-
 
 bot.run(DISCORD_TOKEN)

@@ -455,18 +455,20 @@ async def 랜덤(ctx, *args):
     await ctx.send(f"무작위 선택({k}명)\n선정: {', '.join(winners)}{adjusted_msg}\n{timestamp}")
 
 # ────────────────────────────────────────────────────────────────────────────────
-# 📈 포인트 증감 (C열 기준)
+# 📈 포인트 증감 (이름=A열, 진영=B열, 개인 포인트=C열)
 # ────────────────────────────────────────────────────────────────────────────────
+
 def _apply_delta_to_points(name: str, delta: int, *, start_row: int = 5) -> tuple[int | None, int | None, int | None, str | None]:
     """
-    포인트! B열(B5~)에서 name을 찾아 C열 값을 delta 만큼 증감.
+    포인트! A열(A5~)에서 name을 찾아 C열 값을 delta 만큼 증감.
     반환: (row, cur_val, new_val, err)
     """
     sh = ws("포인트")
 
-    col_b = sh.col_values(2)
+    # A열(=1)에서 이름 탐색
+    col_a = sh.col_values(1)
     target_row = None
-    for idx, v in enumerate(col_b[start_row - 1:], start=start_row):
+    for idx, v in enumerate(col_a[start_row - 1:], start=start_row):
         if v and v.strip() == name:
             target_row = idx
             break
@@ -474,6 +476,7 @@ def _apply_delta_to_points(name: str, delta: int, *, start_row: int = 5) -> tupl
     if target_row is None:
         return (None, None, None, f"'{name}'을(를) 찾지 못했습니다.")
 
+    # C열 포인트
     c_label = f"C{target_row}"
     raw = sh.acell(c_label).value
     s = "" if raw is None else str(raw).strip()
@@ -489,7 +492,8 @@ def _apply_delta_to_points(name: str, delta: int, *, start_row: int = 5) -> tupl
     sh.update_acell(c_label, new_val)
     return (target_row, cur, new_val, None)
 
-@bot.command(name="추가", help="!추가 이름1 [이름2 ...] 수치 → 포인트 시트 C열(C5~) 값을 수치만큼 증가")
+
+@bot.command(name="추가", help="!추가 이름1 [이름2 ...] 수치 → 포인트 시트 C열(C5~) 값을 수치만큼 증가 (이름은 A열 A5~에서 탐색)")
 async def 추가(ctx, *args):
     parsed, err = _parse_names_and_amount(args)
     timestamp = now_kst_str()
@@ -516,6 +520,7 @@ async def 추가(ctx, *args):
     parts.append(timestamp)
     await ctx.send("\n".join(parts))
 
+
 @bot.command(
     name="전체",
     help="!전체 +수치 / -수치 → 포인트 시트 C5부터 마지막 데이터 행까지 숫자 셀에 일괄 증감. 예) !전체 +5, !전체 -3"
@@ -534,6 +539,7 @@ async def 전체(ctx, 수치: str):
     try:
         sh = ws("포인트")
 
+        # C열 전체 길이 파악
         col_c = sh.col_values(3)
         last_row = len(col_c)
         if last_row < 5:
@@ -554,9 +560,11 @@ async def 전체(ctx, 수치: str):
                 new_rows.append([cur + delta])
                 changed += 1
             except ValueError:
+                # 숫자가 아니면 그대로 보존
                 new_rows.append([raw])
 
         sh.update(rng, new_rows, value_input_option="USER_ENTERED")
+        # 편의용: E1에 최종 실행자 기록 (원하면 위치 변경 가능)
         sh.update_acell("E1", ctx.author.display_name)
 
         await ctx.send(f"포인트(C열)에 일괄 적용이 완료되었습니다.\n변경된 셀: {changed}개\n{now_kst_str()}")
@@ -564,7 +572,8 @@ async def 전체(ctx, 수치: str):
     except Exception as e:
         await ctx.send(f"일괄 증감에 실패했습니다.\n원인: {e}")
 
-@bot.command(name="차감", help="!차감 이름1 [이름2 ...] 수치 → 포인트 시트 C열(C5~) 값을 수치만큼 감소")
+
+@bot.command(name="차감", help="!차감 이름1 [이름2 ...] 수치 → 포인트 시트 C열(C5~) 값을 수치만큼 감소 (이름은 A열 A5~에서 탐색)")
 async def 차감(ctx, *args):
     parsed, err = _parse_names_and_amount(args)
     timestamp = now_kst_str()

@@ -199,47 +199,23 @@ class GameButton(discord.ui.Button):
             )
 
         elif self.custom_id == "slot":
-            # 슬롯 심볼
+            # 슬롯 심볼 (랜덤)
             symbols = ['❤️', '💔', '💖', '💝', '🔴', '🔥', '🦋', '💥']
-
-            # --- 확률 조정 (합계 = 100) ---
-            odds = {
-                "jackpot": 1,   # 💥💥💥 (1%)
-                "triple": 6,    # 3개 동일 (6%)
-                "double": 30,   # 2개 동일 (30%)
-                "lose": 63      # 모두 다름 (63%)
-            }
-
-            # --- 결과 유형 결정 ---
-            roll_type = random.choices(
-                population=["jackpot", "triple", "double", "lose"],
-                weights=[odds["jackpot"], odds["triple"], odds["double"], odds["lose"]],
-                k=1
-            )[0]
-
-            # --- 결과 생성 ---
-            if roll_type == "jackpot":
-                reels = ['💥', '💥', '💥']
-                guide = "잭팟! 베팅 포인트를 회복하며 베팅한 포인트의 3배를 추가 획득합니다!"
-
-            elif roll_type == "triple":
-                emoji = random.choice([e for e in symbols if e != '💥'])
-                reels = [emoji, emoji, emoji]
-                guide = "트리플! 베팅 포인트를 회복하며 베팅한 포인트만큼 추가 획득합니다."
-
-            elif roll_type == "double":
-                # 💥 제외 (희귀성 유지)
-                pool = [e for e in symbols if e != '💥']
-                emoji = random.choice(pool)
-                others = [e for e in pool if e != emoji]
-                reels = [emoji, emoji, random.choice(others)]
-                random.shuffle(reels)
+        
+            # --- 결과 생성 (완전 랜덤) ---
+            reels = [random.choice(symbols) for _ in range(3)]
+        
+            # --- 판정 ---
+            if reels.count(reels[0]) == 3:
+                if reels[0] == '💥':
+                    guide = "잭팟! 베팅 포인트를 회복하며 베팅한 포인트의 3배를 추가 획득합니다!"
+                else:
+                    guide = "트리플! 베팅 포인트를 회복하며 베팅한 포인트만큼 추가 획득합니다."
+            elif len(set(reels)) == 2:
                 guide = "더블! 베팅 포인트를 회복합니다."
-
-            else:  # lose
-                reels = random.sample(symbols, 3)
+            else:
                 guide = "베팅 포인트 전액 차감합니다."
-
+        
             # --- 출력 ---
             a, b, c = reels
             await interaction.response.send_message(

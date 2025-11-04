@@ -52,13 +52,13 @@ async def 세팅(ctx):
 class GameMenu(View):
     def __init__(self):
         super().__init__(timeout=None)
-        # 1행 — 카드류
+        # 카드류
         self.add_item(GameButton("블랙잭", "blackjack", discord.ButtonStyle.danger, row=0))
-        # 2행 — 간단 게임류
+        # 간단 게임류
         self.add_item(GameButton("가위바위보", "rps", discord.ButtonStyle.primary, row=1))
         self.add_item(GameButton("홀짝", "odd_even", discord.ButtonStyle.primary, row=1))
         self.add_item(GameButton("야바위", "shell", discord.ButtonStyle.primary, row=1))
-        # 3행 — 슬롯, 다이스
+        # 슬롯 / 다이스
         self.add_item(GameButton("슬롯머신", "slot", discord.ButtonStyle.success, row=2))
         self.add_item(GameButton("다이스", "dice", discord.ButtonStyle.success, row=2))
 
@@ -71,30 +71,34 @@ class GameButton(discord.ui.Button):
         ensure_channel_setup(cid)
         ts = now_kst_str()
 
-        # 🎮 블랙잭
+        # ─── 블랙잭 ───
         if self.custom_id == "blackjack":
-            await inter.response.send_message(
-                f"🃏 **블랙잭 세션 생성**\n플레이어 인원을 선택하세요.",
-                view=PlayerCountSelectView(self.custom_id)
-            )
+            if cid in blackjack_sessions:
+                await inter.response.send_message("⚠️ 이미 진행 중인 블랙잭 게임이 있습니다. 종료 후 다시 시도하세요.", ephemeral=True)
+                return
+            await inter.response.send_message("🃏 **블랙잭 세션 생성**\n플레이어 인원을 선택하세요.", view=PlayerCountSelectView(self.custom_id))
+            return
 
-        # ✂️ 가위바위보
-        elif self.custom_id == "rps":
+        # ─── 가위바위보 ───
+        if self.custom_id == "rps":
             result = random.choice(["가위", "바위", "보"])
             await inter.response.send_message(f"✂️ 가위바위보 결과: {result}\n{ts}")
+            return
 
-        # ⚪ 홀짝
-        elif self.custom_id == "odd_even":
+        # ─── 홀짝 ───
+        if self.custom_id == "odd_even":
             results = ["홀" if random.randint(1,6)%2 else "짝" for _ in range(3)]
             await inter.response.send_message(f"⚪ 홀짝 결과: {' '.join(results)}\n{ts}")
+            return
 
-        # 🎲 야바위
-        elif self.custom_id == "shell":
+        # ─── 야바위 ───
+        if self.custom_id == "shell":
             result = random.choice(['OXX','XOX','XXO'])
             await inter.response.send_message(f"🎲 야바위 결과: {result}\n{ts}")
+            return
 
-        # 🎰 슬롯머신
-        elif self.custom_id == "slot":
+        # ─── 슬롯머신 ───
+        if self.custom_id == "slot":
             symbols = ['❤️','💔','💖','💝','🔴','🔥','🦋','💥']
             reels = [random.choice(symbols) for _ in range(3)]
             if reels.count(reels[0]) == 3:
@@ -104,13 +108,12 @@ class GameButton(discord.ui.Button):
             else:
                 guide = "❌ 꽝!"
             await inter.response.send_message(f"{' '.join(reels)}\n{guide}\n{ts}")
+            return
 
-        # 🎲 다이스
-        elif self.custom_id == "dice":
-            await inter.response.send_message(
-                f"{inter.user.mention} 주사위를 선택하세요.",
-                view=DiceView(owner_id=inter.user.id)
-            )
+        # ─── 다이스 ───
+        if self.custom_id == "dice":
+            await inter.response.send_message(f"{inter.user.mention} 주사위를 선택하세요.", view=DiceView(owner_id=inter.user.id))
+            return
 
 # ────────────────────────────────────────────────────────────────
 # 🎲 다이스 시스템
@@ -123,7 +126,7 @@ class DiceButton(Button):
 
     async def callback(self, inter: discord.Interaction):
         if inter.user.id != self.owner_id:
-            await inter.response.send_message("당신의 다이스가 아닙니다.", ephemeral=True)
+            await inter.response.send_message("⛔ 당신의 다이스가 아닙니다.", ephemeral=True)
             return
         roll = random.randint(1, self.sides)
         await inter.response.send_message(f"🎲 1d{self.sides} 결과: {roll}\n{now_kst_str()}")
@@ -156,9 +159,7 @@ class PlayerCountButton(Button):
         ensure_channel_setup(cid)
         deck_ref = channel_decks[cid][self.game_type]
         blackjack_sessions[cid] = BlackjackSession(cid, deck_ref, self.count)
-        await inter.response.send_message(
-            f"🃏 **블랙잭 세션({self.count}명)** 생성 완료!\n`!참가` 명령어로 참가하세요."
-        )
+        await inter.response.send_message(f"🃏 **블랙잭 세션({self.count}명)** 생성 완료!\n`!참가` 명령어로 참가하세요.")
 
 # ────────────────────────────────────────────────────────────────
 # 🃏 블랙잭 세션 관리
@@ -172,16 +173,20 @@ class BlackjackSession:
         self.finished = set()
         self.busted = set()
         self.ace_values = {}
+        self.actions = {}
+        self.started = False
 
     def deal_initial(self, uid):
         if uid not in self.players:
             self.players[uid] = [self.deck.pop(), self.deck.pop()]
             self.ace_values[uid] = {}
+            self.actions[uid] = False
         return self.players[uid]
 
     def hit(self, uid):
         card = self.deck.pop()
         self.players[uid].append(card)
+        self.actions[uid] = True
         return card
 
     def calc(self, uid):
@@ -189,7 +194,7 @@ class BlackjackSession:
         total = 0
         for i, c in enumerate(cards):
             r = c[1:]
-            if r in ["J", "Q", "K"]:
+            if r in ["J","Q","K"]:
                 total += 10
             elif r == "A":
                 total += self.ace_values.get(uid, {}).get(i, 11)
@@ -202,10 +207,22 @@ class BlackjackSession:
 
     def stay(self, uid):
         self.finished.add(uid)
+        self.actions[uid] = True
 
-    def done(self):
-        return len(self.players) >= self.max_players and \
-            all(uid in self.finished or self.calc(uid) > 21 for uid in self.players)
+    def everyone_acted(self):
+        if len(self.players) < self.max_players:
+            return False
+        return all(self.actions.get(uid, False) or uid in self.busted for uid in self.players)
+
+    def reset_actions(self):
+        for uid in self.players:
+            if uid not in self.finished and uid not in self.busted:
+                self.actions[uid] = False
+
+    def is_done(self):
+        if len(self.players) < self.max_players:
+            return False
+        return all(uid in self.finished or self.calc(uid) > 21 for uid in self.players)
 
 blackjack_sessions = {}
 
@@ -219,14 +236,23 @@ async def 참가(ctx):
         await ctx.send("❌ 블랙잭 세션이 없습니다.")
         return
     sess = blackjack_sessions[cid]
+    if sess.started:
+        await ctx.send("⚠️ 이미 게임이 시작되었습니다.")
+        return
     if len(sess.players) >= sess.max_players and uid not in sess.players:
         await ctx.send("🚫 참가 인원 초과!")
         return
+
     cards = sess.deal_initial(uid)
     sc = sess.calc(uid)
-    await ctx.send(f"**{uname}** 참가 완료!\n🂠 {' '.join(cards)} (합계 {sc})", view=BlackjackPlayView(uid))
+    await ctx.send(f"**{uname}** 참가 완료!\n🂠 {' '.join(cards)} (합계 {sc})")
+
     if len(sess.players) == sess.max_players:
-        await ctx.send(f"🎮 모든 참가자({sess.max_players}명) 준비 완료! 게임 시작!")
+        sess.started = True
+        names = [ctx.guild.get_member(int(u)).display_name for u in sess.players]
+        await ctx.send(f"✅ 참가자: {', '.join(names)}\n🎮 블랙잭 게임을 시작합니다!")
+        for uid2 in sess.players.keys():
+            await ctx.send(f"<@{uid2}> 님 차례입니다.", view=BlackjackPlayView(uid2))
 
 # ────────────────────────────────────────────────────────────────
 # 🎮 플레이
@@ -245,21 +271,30 @@ class HitButton(Button):
     async def callback(self, inter):
         cid, uid, uname = str(inter.channel.id), str(inter.user.id), inter.user.display_name
         sess = blackjack_sessions[cid]
+        if uid != self.view.uid:
+            await inter.response.send_message("⛔ 본인만 조작할 수 있습니다.", ephemeral=True)
+            return
+
         new_card = sess.hit(uid)
         idx = len(sess.players[uid]) - 1
         sc = sess.calc(uid)
-
         if "A" in new_card:
             await inter.channel.send(f"**{uname}** 새 카드 {new_card}, A값 선택!", view=AceChoiceView(uid, idx))
             return
-
         if sc > 21:
             sess.busted.add(uid)
             await inter.channel.send(f"💥 **{uname} 버스트!** (합계 {sc})")
         else:
-            await inter.channel.send(f"**{uname}** {' '.join(sess.players[uid])} (합계 {sc})", view=BlackjackPlayView(uid))
-        if sess.done():
-            await announce_result(inter, sess)
+            await inter.channel.send(f"**{uname}** {' '.join(sess.players[uid])} (합계 {sc})")
+        if sess.everyone_acted():
+            if sess.is_done():
+                await announce_result(inter, sess)
+            else:
+                sess.reset_actions()
+                await inter.channel.send("🔁 **모든 참가자가 선택을 마쳤습니다. 다음 라운드를 진행합니다.**")
+                for uid2 in sess.players.keys():
+                    if uid2 not in sess.finished and uid2 not in sess.busted:
+                        await inter.channel.send(f"<@{uid2}> 님 차례입니다.", view=BlackjackPlayView(uid2))
 
 class StayButton(Button):
     def __init__(self):
@@ -268,11 +303,21 @@ class StayButton(Button):
     async def callback(self, inter):
         cid, uid, uname = str(inter.channel.id), str(inter.user.id), inter.user.display_name
         sess = blackjack_sessions[cid]
+        if uid != self.view.uid:
+            await inter.response.send_message("⛔ 본인만 조작할 수 있습니다.", ephemeral=True)
+            return
         sess.stay(uid)
         sc = sess.calc(uid)
         await inter.channel.send(f"**{uname}** 스테이. (합계 {sc})")
-        if sess.done():
-            await announce_result(inter, sess)
+        if sess.everyone_acted():
+            if sess.is_done():
+                await announce_result(inter, sess)
+            else:
+                sess.reset_actions()
+                await inter.channel.send("🔁 **모든 참가자가 선택을 마쳤습니다. 다음 라운드를 진행합니다.**")
+                for uid2 in sess.players.keys():
+                    if uid2 not in sess.finished and uid2 not in sess.busted:
+                        await inter.channel.send(f"<@{uid2}> 님 차례입니다.", view=BlackjackPlayView(uid2))
 
 # ────────────────────────────────────────────────────────────────
 # 🅰️ A 선택
@@ -293,14 +338,25 @@ class AceButton(Button):
     async def callback(self, inter):
         cid, uid, uname = str(inter.channel.id), str(inter.user.id), inter.user.display_name
         sess = blackjack_sessions[cid]
+        if uid != self.view.uid:
+            await inter.response.send_message("⛔ 본인만 조작할 수 있습니다.", ephemeral=True)
+            return
         sess.set_ace(uid, self.view.idx, self.val)
         sc = sess.calc(uid)
-        await inter.channel.send(f"**{uname}** A={self.val} 선택 → {' '.join(sess.players[uid])} (합계 {sc})", view=BlackjackPlayView(uid))
+        await inter.channel.send(f"**{uname}** A={self.val} 선택 → {' '.join(sess.players[uid])} (합계 {sc})")
+        sess.actions[uid] = True
         if sc > 21:
             sess.busted.add(uid)
             await inter.channel.send(f"💥 **{uname} 버스트!** (합계 {sc})")
-        if sess.done():
-            await announce_result(inter, sess)
+        if sess.everyone_acted():
+            if sess.is_done():
+                await announce_result(inter, sess)
+            else:
+                sess.reset_actions()
+                await inter.channel.send("🔁 **모든 참가자가 선택을 마쳤습니다. 다음 라운드를 진행합니다.**")
+                for uid2 in sess.players.keys():
+                    if uid2 not in sess.finished and uid2 not in sess.busted:
+                        await inter.channel.send(f"<@{uid2}> 님 차례입니다.", view=BlackjackPlayView(uid2))
 
 # ────────────────────────────────────────────────────────────────
 # 🏁 결과 + 자동 셔플
@@ -330,9 +386,9 @@ async def announce_result(inter, sess):
             winner = f"🤝 공동 승리: {', '.join(names)} ({max_s})"
 
     await ch.send("🃏 **블랙잭 결과 발표**\n" + "\n".join(lines) + f"\n\n{winner}")
+    await ch.send("🎮 **게임 종료!** 새로운 세션을 시작하려면 `!세팅`을 입력하세요.")
     shuffle_all_decks(sess.cid)
     del blackjack_sessions[sess.cid]
-    await ch.send("🔄 카드 덱이 자동으로 셔플되었습니다. 새로운 게임을 시작하세요.")
 
 # ────────────────────────────────────────────────────────────────
 bot.run(os.getenv("DISCORD_BOT_TOKEN"))

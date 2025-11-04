@@ -410,13 +410,13 @@ class BlindBlackjackSession:
 # ────────────────────────────────────────────────────────────────
 # 🎮 참가 (블랙잭/블라인드 공용) — !참가 베팅금액
 # ────────────────────────────────────────────────────────────────
+
 @bot.command(name="참가", help="현재 세션에 베팅하고 참가합니다. 예) !참가 20")
 async def 참가(ctx, 금액: str = None):
     cid = str(ctx.channel.id)
     uid = str(ctx.author.id)
     uname = ctx.author.display_name
 
-    # 어떤 세션이 열려 있는지 확인
     sess = None
     mode = None
     if cid in blackjack_sessions:
@@ -436,41 +436,39 @@ async def 참가(ctx, 금액: str = None):
         return
     bet = int(금액)
 
-    # 소지금 확인/등록
     ensure_user_row(uid, uname)
     bal = get_balance(uid, uname)
     if bet > bal:
         await ctx.send(f"❌ 베팅 금액이 소지금({bal})을 초과합니다.")
         return
 
-    # 참가/배팅 기록
     sess.bets[uid] = bet
-    cards = sess.deal_initial(uid)
-    if mode == "bj":
-        # 카드 공개 + 점수(에이스는 기본 11이지만 나중에 선택 가능)
-        sc = sess.score(uid)
-        await ctx.send(f"**{uname}** 참가 — 베팅 {bet}\n🂠 카드: {' '.join(cards)} (합계 {sc})")
-    else:
-        # 블라인드: 카드 비공개
-        sc = sess.score(uid)  # 내부 계산용
-        await ctx.send(f"**{uname}** 참가 — 베팅 {bet}\n🂠 카드 2장 분배(비공개)")
+    await ctx.send(f"**{uname}** 참가 완료 — 베팅 {bet}")
 
-    # 정원 확인 → 전원 참가 시 시작
+    # 전원 참가 완료 시 시작
     if sess.everyone_joined():
         sess.started = True
-        # 블라인드: 최초 전원 버스트면 재배분
+        await ctx.send(f"✅ 참가자({sess.max_players}명) 전원 참가 완료!\n🃏 카드 분배를 시작합니다...")
+
+        # 카드 분배
+        for u in sess.bets.keys():
+            sess.deal_initial(u)
+
+        # 블라인드 BJ는 버스트 검사
         if mode == "blind" and sess.initial_all_bust():
             sess.redeal_all()
             await ctx.send("⚠️ 최초 분배가 전원 버스트여서 재배분합니다.")
 
+        # 참가자 안내
         names = [ctx.guild.get_member(int(u)).display_name for u in sess.players]
-        await ctx.send(f"✅ 참가자({sess.max_players}명): {', '.join(names)}\n🎮 게임 시작!")
-        # 첫 라운드 버튼 전송
+        await ctx.send(f"🎮 게임 시작!\n참가자: {', '.join(names)}")
+
+        # 첫 라운드 버튼
         for u in sess.players.keys():
             if mode == "bj":
                 await ctx.send(f"<@{u}> 님 차례입니다.", view=BlackjackPlayView(target_uid=u))
             else:
-                await ctx.send(f"<@{u}> 님 차례입니다.", view=BlindPlayView(target_uid=u))
+                await ct
 
 # ────────────────────────────────────────────────────────────────
 # 🎮 블랙잭 플레이 뷰 (개인 전용 버튼)

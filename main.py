@@ -209,11 +209,12 @@ class BlackjackSession:
         self.started = False
 
     def deal_initial(self, uid):
-        if uid not in self.players:
-            self.players[uid] = [self.deck.pop(), self.deck.pop()]
-            self.ace_values[uid] = {}
-            self.actions[uid] = False
-        return self.players[uid]
+        # 항상 2장씩 분배 (이미 등록된 유저라도)
+        cards = [self.deck.pop(), self.deck.pop()]
+        self.players[uid] = cards
+        self.ace_values[uid] = {}
+        self.actions[uid] = False
+        return cards
 
     def score(self, uid):
         total = 0
@@ -245,15 +246,14 @@ class BlindBlackjackSession:
         self.hidden_info = {}  # uid: {"cards": [...], "score": int}
 
     def deal_initial(self, uid):
-        if uid not in self.players:
-            cards = [self.deck.pop(), self.deck.pop()]
-            self.players[uid] = cards
-            self.hidden_info[uid] = {
-                "cards": cards,
-                "score": self.score_from_cards(cards)
-            }
-            self.actions[uid] = False
-        return self.players[uid]
+        cards = [self.deck.pop(), self.deck.pop()]
+        self.players[uid] = cards
+        self.hidden_info[uid] = {
+            "cards": cards,
+            "score": self.score_from_cards(cards)
+        }
+        self.actions[uid] = False
+        return cards
 
     def score_from_cards(self, cards):
         total = 0

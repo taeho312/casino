@@ -230,6 +230,7 @@ class BlindBlackjackSession(BlackjackSession):
 # ────────────────────────────────────────────────────────────────
 # 🎮 참가 명령어
 # ────────────────────────────────────────────────────────────────
+
 @bot.command(name="참가")
 async def 참가(ctx, 금액: str = None):
     cid, uid, uname = str(ctx.channel.id), str(ctx.author.id), ctx.author.display_name
@@ -258,21 +259,36 @@ async def 참가(ctx, 금액: str = None):
     # 전원 참가 완료 시
     if sess.everyone_joined():
         sess.started = True
-        await ctx.send(f"✅ 참가자({sess.max_players}명) 전원 참가 완료!\n🃏 카드 분배를 시작합니다...")
-
+        await ctx.send(f"✅ 참가자({sess.max_players}명) 전원 참가 완료!\n🃏 첫 카드 분배를 시작합니다...")
+    
         # 카드 분배
         for u in sess.bets.keys():
             sess.deal_initial(u)
-
+    
+        # 각 플레이어 카드 안내
+        for u in sess.players.keys():
+            member = ctx.guild.get_member(int(u))
+            name = member.display_name if member else f"UID:{u}"
+            cards = ' '.join(sess.players[u])
+            score = sess.score(u)
+            await ctx.send(f"**{name}** 님의 첫 패: {cards} (합계 {score})")
+    
+        # 블라인드 BJ는 전원 버스트 시 재배분
+        if mode == "blind" and hasattr(sess, "initial_all_bust") and sess.initial_all_bust():
+            sess.redeal_all()
+            await ctx.send("⚠️ 최초 분배가 전원 버스트여서 재배분합니다.")
+    
+        # 참가자 안내
         names = [ctx.guild.get_member(int(u)).display_name for u in sess.bets]
         await ctx.send(f"🎮 게임 시작!\n참가자: {', '.join(names)}")
-
-        # 첫 라운드 버튼 배포
+    
+        # 첫 라운드 버튼 생성
         for u in sess.players.keys():
-            if mode=="bj":
+            if mode == "bj":
                 await ctx.send(f"<@{u}> 님 차례입니다.", view=BlackjackPlayView(target_uid=u))
             else:
                 await ctx.send(f"<@{u}> 님 차례입니다.", view=BlindPlayView(target_uid=u))
+
 
 # ────────────────────────────────────────────────────────────────
 # 🎮 블랙잭 플레이 (히트/스테이)

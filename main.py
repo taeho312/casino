@@ -313,6 +313,8 @@ async def 참가(ctx, 금액:str=None):
     bet=int(금액)
     if bet>get_balance(uid,uname): await ctx.send("❌ 소지금 부족."); return
     sess.bets[uid]=bet
+    if uid not in sess.players:
+        sess.players[uid] = []  # 플레이어 등록
     await ctx.send(f"✅ {uname} 참가 — 베팅 {bet}")
 
     if sess.everyone_joined():

@@ -318,28 +318,37 @@ async def 참가(ctx, 금액:str=None):
     await ctx.send(f"✅ {uname} 참가 — 베팅 {bet}")
 
     if sess.everyone_joined():
-        sess.started=True
-        await ctx.send(f"✅ 참가자({sess.max_players}명) 전원 참가 완료!\n🃏 첫 카드 분배를 시작합니다...")
-        for u in sess.bets: sess.deal_initial(u)
+    sess.started = True
+    await ctx.send(f"✅ 참가자({sess.max_players}명) 전원 참가 완료!\n🃏 첫 카드 분배를 시작합니다...")
 
-        if mode=="bj":
-            # 카드 공개
+        # 🎴 카드 분배 (모두에게 2장씩)
+        for u in sess.bets:
+            sess.deal_initial(u)
+    
+        # 블랙잭 모드 - 카드 공개
+        if mode == "bj":
             for u in sess.players:
-                member=ctx.guild.get_member(int(u)); name=member.display_name if member else f"UID:{u}"
-                cards=" ".join(sess.players[u]); score=sess.score(u)
+                member = ctx.guild.get_member(int(u))
+                name = member.display_name if member else f"UID:{u}"
+                cards = " ".join(sess.players[u])
+                score = sess.score(u)
                 await ctx.send(f"**{name}** 님의 첫 패: {cards} (합계 {score})")
+    
+        # 블라인드 블랙잭 모드 - 완전 비공개
         else:
-            # 완전 비공개 (카드도, 합계도 공개하지 않음)
             for u in sess.players:
                 member = ctx.guild.get_member(int(u))
                 name = member.display_name if member else f"UID:{u}"
                 await ctx.send(f"**{name}** 님의 첫 패 분배 완료. (카드 및 합계 비공개)")
-
-        names=[ctx.guild.get_member(int(u)).display_name for u in sess.bets]
+    
+        # 🎮 참가자 안내
+        names = [ctx.guild.get_member(int(u)).display_name for u in sess.bets]
         await ctx.send(f"🎮 게임 시작!\n참가자: {', '.join(names)}")
-
+    
+        # 🧭 첫 라운드 히트/스테이는 카드 분배 후 자동 시작
         for u in sess.players:
-            if mode=="bj":
+            # 자동 카드 분배가 끝나고 나서 첫 차례부터 버튼 생성
+            if mode == "bj":
                 await ctx.send(f"<@{u}> 님 차례입니다.", view=BlackjackPlayView(target_uid=u))
             else:
                 await ctx.send(f"<@{u}> 님 차례입니다.", view=BlindPlayView(target_uid=u))

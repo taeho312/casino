@@ -318,8 +318,8 @@ async def 참가(ctx, 금액:str=None):
     await ctx.send(f"✅ {uname} 참가 — 베팅 {bet}")
 
     if sess.everyone_joined():
-    sess.started = True
-    await ctx.send(f"✅ 참가자({sess.max_players}명) 전원 참가 완료!\n🃏 첫 카드 분배를 시작합니다...")
+        sess.started = True
+        await ctx.send(f"✅ 참가자({sess.max_players}명) 전원 참가 완료!\n🃏 첫 카드 분배를 시작합니다...")
 
         # 🎴 카드 분배 (모두에게 2장씩)
         for u in sess.bets:
